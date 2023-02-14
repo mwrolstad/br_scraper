@@ -258,8 +258,8 @@ def scrape_games(year: int, month: int, day: int, proxies: Dict[str, str]):
 
 
 class GameScraper:
-    def __init__(proxies=None):
-        proxies = proxies
+    def __init__(self, proxies=None):
+        self.proxies = proxies
 
     def scrape_day(self, year: int, month: int, day: int):
         try:
