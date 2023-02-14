@@ -941,3 +941,16 @@ print(json.dumps(stats[0], indent=2))
   ]
 }
 ```
+
+You can also add proxies that will be used by the requests module:
+
+```python
+from br_scraper import GameScraper
+import json
+game_scraper = GameScraper(proxies={
+    "http": "test:password@proxy_url:port",
+    "https": "test:password@proxy_url:port",
+  }
+)
+stats = game_scraper.scrape_day(year=2022, month=11, day=5)
+```

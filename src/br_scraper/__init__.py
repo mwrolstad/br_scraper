@@ -7,6 +7,8 @@ import re
 import requests
 import pandas as pd
 
+from typing import Dict
+
 BASE_URL = "https://www.baseball-reference.com"
 MLB_ABRV = json.load(open(os.path.join(os.path.dirname(__file__), "mlb_abbreviations.json")))
 
@@ -59,9 +61,9 @@ def month_string_to_number(string):
         raise ValueError("Not a month")
 
 
-def scrape_previews():
+def scrape_previews(proxies: Dict[str, str] = None):
     url = "{base_url}/previews".format(base_url=BASE_URL)
-    response = requests.get(url)
+    response = requests.get(url, proxies=proxies)
 
     tree = html.fromstring(response.content)
     games_count = len(tree.xpath('//*[@class="game_summary nohover"]'))
@@ -81,7 +83,7 @@ def scrape_previews():
             game_dict["game_url"] = f"https://www.baseball-reference.com{game_url_ls[0].attrib['href']}"
             print("Crawling the URL:", game_dict["game_url"])
 
-            game_response = requests.get(game_dict["game_url"])
+            game_response = requests.get(game_dict["game_url"], proxies=proxies)
             game_tree = html.fromstring(game_response.content)
 
             game_date = game_tree.xpath('//*[@id="content"]/h1/text()')
@@ -100,7 +102,7 @@ def scrape_previews():
                 for i in range(0, 2):
 
                     game_dict["team"] = teams[i]
-                    stats_df = requests.get(game_dict["game_url"])
+                    stats_df = requests.get(game_dict["game_url"], proxies=proxies)
 
                     game_dict["home_away"] = 1 if game_dict["team"] == game_dict["home_abrv"] else 0
                     game_dict["record"] = stats_df[i][1][1]
@@ -140,7 +142,7 @@ def scrape_previews():
     return ls_games
 
 
-def scrape_games(year: int, month: int, day: int):
+def scrape_games(year: int, month: int, day: int, proxies: Dict[str, str]):
 
     url = "{base_url}/boxes/?year={year}&month={month}&day={day}".format(
         base_url=BASE_URL,
@@ -149,7 +151,7 @@ def scrape_games(year: int, month: int, day: int):
         day=day,
     )
     print("Crawling the url: {url}".format(url=url))
-    response = requests.get(url)
+    response = requests.get(url, proxies=proxies)
 
     game_date_num = "{year}{month}{day}".format(
         year=year,
@@ -204,7 +206,7 @@ def scrape_games(year: int, month: int, day: int):
                 }
                 print("About to gather the game data")
 
-                game_response = requests.get(game_dict["game_url"])
+                game_response = requests.get(game_dict["game_url"], proxies=proxies)
 
                 teams = [game_dict["away_abrv"], game_dict["home_abrv"], game_dict["away_abrv"], game_dict["home_abrv"]]
 
@@ -256,16 +258,19 @@ def scrape_games(year: int, month: int, day: int):
 
 
 class GameScraper:
+    def __init__(proxies=None):
+        proxies = proxies
+
     def scrape_day(self, year: int, month: int, day: int):
         try:
-            return scrape_games(year=year, month=month, day=day)
+            return scrape_games(year=year, month=month, day=day, proxies=self.proxies)
         except Exception as e:
             print(f"An error occurred:\n{e}")
             return
 
     def scrape_preview(self):
         try:
-            return scrape_previews()
+            return scrape_previews(proxies=self.proxies)
         except Exception as e:
             print(f"An error occurred:\n{e}")
             return
