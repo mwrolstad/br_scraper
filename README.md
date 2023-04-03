@@ -12,7 +12,7 @@ An easy tool to scrape the game and preview data from baseball-reference.com
 ### Use as a command line:
 
 ```cmd
-python3 src/pfr_scraper/__init__.py --year 2022 --month 11 --day 5
+python3 src/br_scraper/__init__.py --year 2022 --month 11 --day 5
 ```
 
 ### Build package and import:

@@ -2,6 +2,7 @@ from lxml import html
 
 import argparse
 import json
+import numpy as np
 import os
 import re
 import requests
@@ -12,6 +13,11 @@ from typing import Dict
 BASE_URL = "https://www.baseball-reference.com"
 MLB_ABRV = json.load(open(os.path.join(os.path.dirname(__file__), "mlb_abbreviations.json")))
 
+HEADER = {
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+    "sec-ch-ua": '"Chromium";v="110", "Not A(Brand";v="24", "Google Chrome";v="110"',
+    "sec-fetch-dest": "document",
+}
 
 def convert_date_to_number(dt, override_year=None):
     try:
@@ -63,81 +69,89 @@ def month_string_to_number(string):
 
 def scrape_previews(proxies: Dict[str, str] = None):
     url = "{base_url}/previews".format(base_url=BASE_URL)
-    response = requests.get(url, proxies=proxies)
+    response = requests.get(url, proxies=proxies, headers=HEADER)
 
     tree = html.fromstring(response.content)
-    games_count = len(tree.xpath('//*[@class="game_summary nohover"]'))
+    games_count = len(tree.xpath('//*[@class="game_summary nohover "]'))
 
     ls_games = []
 
     for g in range(1, games_count + 1):
 
-        game_dict = {}
+        try:
+            game_dict = {}
 
-        away_team_link = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[1]/td[1]/a')
-        home_team_link = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[2]/td[1]/a')
-        game_url_ls = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[1]/td[3]/a')
+            away_team_link = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[1]/td[1]/a')
+            home_team_link = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[2]/td[1]/a')
+            game_url_ls = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[1]/td[3]/a')
 
-        if len(away_team_link) > 0 and len(home_team_link) > 0 and len(game_url_ls) > 0:
+            if len(away_team_link) > 0 and len(home_team_link) > 0 and len(game_url_ls) > 0:
 
-            game_dict["game_url"] = f"https://www.baseball-reference.com{game_url_ls[0].attrib['href']}"
-            print("Crawling the URL:", game_dict["game_url"])
+                game_dict["game_url"] = f"https://www.baseball-reference.com{game_url_ls[0].attrib['href']}"
+                print("Crawling the URL:", game_dict["game_url"])
 
-            game_response = requests.get(game_dict["game_url"], proxies=proxies)
-            game_tree = html.fromstring(game_response.content)
+                game_response = requests.get(game_dict["game_url"], proxies=proxies, headers=HEADER)
+                game_tree = html.fromstring(game_response.content)
 
-            game_date = game_tree.xpath('//*[@id="content"]/h1/text()')
+                game_date = game_tree.xpath('//*[@id="content"]/h1/text()')
 
-            if len(game_date) > 0:
+                if len(game_date) > 0:
 
-                game_dict["away_team"] = away_team_link[0].text
-                game_dict["home_team"] = home_team_link[0].text
-                game_dict["away_abrv"] = MLB_ABRV[game_dict["away_team"]]
-                game_dict["home_abrv"] = MLB_ABRV[game_dict["home_team"]]
+                    game_dict["away_team"] = away_team_link[0].text
+                    game_dict["home_team"] = home_team_link[0].text
 
-                game_date_num = convert_date_to_number(game_date[0])
-                teams = [game_dict["away_abrv"], game_dict["home_abrv"]]
-                print("The date we're working with is...", game_date_num)
+                    print(game_dict["away_team"], "@", game_dict["home_team"])
 
-                for i in range(0, 2):
+                    game_dict["away_abrv"] = MLB_ABRV[game_dict["away_team"]]
+                    game_dict["home_abrv"] = MLB_ABRV[game_dict["home_team"]]
 
-                    game_dict["team"] = teams[i]
-                    stats_df = requests.get(game_dict["game_url"], proxies=proxies)
+                    game_date_num = convert_date_to_number(game_date[0])
+                    teams = [game_dict["away_abrv"], game_dict["home_abrv"]]
+                    print("The date we're working with is...", game_date_num)
 
-                    game_dict["home_away"] = 1 if game_dict["team"] == game_dict["home_abrv"] else 0
-                    game_dict["record"] = stats_df[i][1][1]
-                    game_dict["game_num"] = stats_df[i][1][3]
-                    game_dict["last_10"] = stats_df[i][1][10]
-                    game_dict["last_20"] = stats_df[i][1][11]
-                    game_dict["last_30"] = stats_df[i][1][12]
-                    game_dict["home_rec"] = stats_df[i][1][13]
-                    game_dict["away_rec"] = stats_df[i][1][14]
-                    game_dict["extras_rec"] = stats_df[i][1][15]
-                    game_dict["vs_RHP"] = stats_df[i][1][16]
-                    game_dict["vs_LHP"] = stats_df[i][1][17]
-                    game_dict["onerun_rec"] = stats_df[i][1][18]
-                    game_dict["vs_east"] = stats_df[i][1][19]
-                    game_dict["vs_central"] = stats_df[i][1][20]
-                    game_dict["vs_west"] = stats_df[i][1][21]
-                    game_dict["vs_interleague"] = stats_df[i][1][22]
+                    for i in range(0, 2):
 
-                    if teams[i] == "WSH":
-                        pitch_abrv = "WSN"
-                    elif teams[i] == "TB":
-                        pitch_abrv = "TBR"
-                    elif teams[i] == "KC":
-                        pitch_abrv = "KCR"
-                    elif teams[i] == "SF":
-                        pitch_abrv = "SFG"
-                    elif teams[i] == "SD":
-                        pitch_abrv = "SDP"
-                    else:
-                        pitch_abrv = teams[i]
+                        game_dict["team"] = teams[i]
+                        stats_resp = requests.get(game_dict["game_url"], proxies=proxies, headers=HEADER)
+                        stats_df = pd.read_html(stats_resp.text)
 
-                    pitcher_table = game_tree.xpath(f'//*[@id="sp_{pitch_abrv}_sh"]/h2/a')
-                    game_dict["pitcher"] = pitcher_table[0].text if len(pitcher_table) > 0 else None
+                        game_dict["home_away"] = 1 if game_dict["team"] == game_dict["home_abrv"] else 0
+                        game_dict["record"] = stats_df[i][1][1]
+                        game_dict["game_num"] = stats_df[i][1][3]
+                        game_dict["last_10"] = stats_df[i][1][10]
+                        game_dict["last_20"] = stats_df[i][1][11]
+                        game_dict["last_30"] = stats_df[i][1][12]
+                        game_dict["home_rec"] = stats_df[i][1][13]
+                        game_dict["away_rec"] = stats_df[i][1][14]
+                        game_dict["extras_rec"] = stats_df[i][1][15]
+                        game_dict["vs_RHP"] = stats_df[i][1][16]
+                        game_dict["vs_LHP"] = stats_df[i][1][17]
+                        game_dict["onerun_rec"] = stats_df[i][1][18]
+                        game_dict["vs_east"] = stats_df[i][1][19]
+                        game_dict["vs_central"] = stats_df[i][1][20]
+                        game_dict["vs_west"] = stats_df[i][1][21]
+                        game_dict["vs_interleague"] = stats_df[i][1][22]
 
-                    ls_games.append(game_dict)
+                        if teams[i] == "WSH":
+                            pitch_abrv = "WSN"
+                        elif teams[i] == "TB":
+                            pitch_abrv = "TBR"
+                        elif teams[i] == "KC":
+                            pitch_abrv = "KCR"
+                        elif teams[i] == "SF":
+                            pitch_abrv = "SFG"
+                        elif teams[i] == "SD":
+                            pitch_abrv = "SDP"
+                        else:
+                            pitch_abrv = teams[i]
+
+                        pitcher_table = game_tree.xpath(f'//*[@id="sp_{pitch_abrv}_sh"]/h2/a')
+                        game_dict["pitcher"] = pitcher_table[0].text if len(pitcher_table) > 0 else None
+
+                        ls_games.append(game_dict)
+
+        except Exception as e:
+            print(f"Ran into an exception processing game #{g}, continuing...:\n{e}")
 
     return ls_games
 
@@ -151,14 +165,13 @@ def scrape_games(year: int, month: int, day: int, proxies: Dict[str, str]):
         day=day,
     )
     print("Crawling the url: {url}".format(url=url))
-    response = requests.get(url, proxies=proxies)
+    response = requests.get(url, proxies=proxies, headers=HEADER)
 
     game_date_num = "{year}{month}{day}".format(
         year=year,
         month=str.zfill(month, 2),
         day=str.zfill(day, 2),
     )
-    # print("response.content", response.content)
     tree = html.fromstring(response.content)
     games_count = len(tree.xpath('//*[@class="game_summary nohover "]'))
 
@@ -206,7 +219,7 @@ def scrape_games(year: int, month: int, day: int, proxies: Dict[str, str]):
                 }
                 print("About to gather the game data")
 
-                game_response = requests.get(game_dict["game_url"], proxies=proxies)
+                game_response = requests.get(game_dict["game_url"], proxies=proxies, headers=HEADER)
 
                 teams = [game_dict["away_abrv"], game_dict["home_abrv"], game_dict["away_abrv"], game_dict["home_abrv"]]
 
@@ -233,8 +246,9 @@ def scrape_games(year: int, month: int, day: int, proxies: Dict[str, str]):
                     stats_df["game_date"] = game_dict["game_date"]
 
                     if i <= 1:
-                        stats_df["WPA-"] = stats_df["WPA-"].str.replace("%", "").astype(float).round(decimals=3)
-                        stats_df["cWPA"] = stats_df["cWPA"].str.replace("%", "").astype(float).round(decimals=3)
+                        stats_df["WPA-"] = stats_df["WPA-"].replace("%", "").astype(float).round(decimals=3)
+                        stats_df["cWPA"] = 0
+                        # stats_df["cWPA"] = stats_df["cWPA"].replace("%", "").astype(float).round(decimals=3)
                         stats_df = stats_df[stats_df["Batting"] != "Team Totals"]
                         stats_df = stats_df[stats_df["AB"].notna()]
                         stats_df["Batting"] = (
@@ -249,7 +263,9 @@ def scrape_games(year: int, month: int, day: int, proxies: Dict[str, str]):
                         stats_df["WPA"] = stats_df["WPA"].round(decimals=3)
                         stats_df["aLI"] = stats_df["aLI"].round(decimals=3)
                         stats_df["RE24"] = stats_df["RE24"].round(decimals=3)
-                        stats_df["cWPA"] = stats_df["cWPA"].str.replace("%", "").astype(float).round(decimals=3)
+                        stats_df["ERA"] = stats_df["ERA"].replace([np.inf, -np.inf], 100.0)
+                        stats_df["cWPA"] = 0
+                        # stats_df["cWPA"] = stats_df["cWPA"].replace("%", "").astype(float).round(decimals=3)
                         game_dict["pitcher_stats"] = game_dict["pitcher_stats"] + stats_df.to_dict(orient="records")
 
                 games_ls.append(game_dict)
@@ -266,14 +282,14 @@ class GameScraper:
             return scrape_games(year=year, month=month, day=day, proxies=self.proxies)
         except Exception as e:
             print(f"An error occurred:\n{e}")
-            return
+            return []
 
     def scrape_preview(self):
         try:
             return scrape_previews(proxies=self.proxies)
         except Exception as e:
             print(f"An error occurred:\n{e}")
-            return
+            return []
 
 
 def main(year: int, month: int, day: int):
