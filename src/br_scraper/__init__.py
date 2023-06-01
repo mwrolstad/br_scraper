@@ -79,42 +79,44 @@ def scrape_previews(proxies: Dict[str, str] = None):
     for g in range(1, games_count + 1):
 
         try:
-            game_dict = {}
-
             away_team_link = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[1]/td[1]/a')
             home_team_link = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[2]/td[1]/a')
             game_url_ls = tree.xpath(f'//*[@id="content"]/div[1]/div[{g}]/table/tbody/tr[1]/td[3]/a')
 
             if len(away_team_link) > 0 and len(home_team_link) > 0 and len(game_url_ls) > 0:
 
-                game_dict["game_url"] = f"https://www.baseball-reference.com{game_url_ls[0].attrib['href']}"
-                print("Crawling the URL:", game_dict["game_url"])
+                base_dict = {}
 
-                game_response = requests.get(game_dict["game_url"], proxies=proxies, headers=HEADER)
+                base_dict["game_url"] = f"https://www.baseball-reference.com{game_url_ls[0].attrib['href']}"
+                print("Crawling the URL:", base_dict["game_url"])
+
+                game_response = requests.get(base_dict["game_url"], proxies=proxies, headers=HEADER)
                 game_tree = html.fromstring(game_response.content)
 
                 game_date = game_tree.xpath('//*[@id="content"]/h1/text()')
 
                 if len(game_date) > 0:
 
-                    game_dict["away_team"] = away_team_link[0].text
-                    game_dict["home_team"] = home_team_link[0].text
+                    base_dict["away_team"] = away_team_link[0].text
+                    base_dict["home_team"] = home_team_link[0].text
 
-                    print(game_dict["away_team"], "@", game_dict["home_team"])
+                    print(base_dict["away_team"], "@", base_dict["home_team"])
 
-                    game_dict["away_abrv"] = MLB_ABRV[game_dict["away_team"]]
-                    game_dict["home_abrv"] = MLB_ABRV[game_dict["home_team"]]
+                    base_dict["away_abrv"] = MLB_ABRV[base_dict["away_team"]]
+                    base_dict["home_abrv"] = MLB_ABRV[base_dict["home_team"]]
 
-                    game_date_num = convert_date_to_number(game_date[0])
-                    teams = [game_dict["away_abrv"], game_dict["home_abrv"]]
-                    print("The date we're working with is...", game_date_num)
+                    base_dict["game_date_num"] = convert_date_to_number(game_date[0])
+                    teams = [base_dict["away_abrv"], base_dict["home_abrv"]]
+                    print("The date we're working with is...", base_dict["game_date_num"])
+
+                    stats_resp = requests.get(base_dict["game_url"], proxies=proxies, headers=HEADER)
+                    stats_df = pd.read_html(stats_resp.text)
 
                     for i in range(0, 2):
 
-                        game_dict["team"] = teams[i]
-                        stats_resp = requests.get(game_dict["game_url"], proxies=proxies, headers=HEADER)
-                        stats_df = pd.read_html(stats_resp.text)
+                        game_dict = base_dict.copy()
 
+                        game_dict["team"] = teams[i]
                         game_dict["home_away"] = 1 if game_dict["team"] == game_dict["home_abrv"] else 0
                         game_dict["record"] = stats_df[i][1][1]
                         game_dict["game_num"] = stats_df[i][1][3]
@@ -157,7 +159,6 @@ def scrape_previews(proxies: Dict[str, str] = None):
 
 
 def scrape_games(year: int, month: int, day: int, proxies: Dict[str, str]):
-
     url = "{base_url}/boxes/?year={year}&month={month}&day={day}".format(
         base_url=BASE_URL,
         year=year,
