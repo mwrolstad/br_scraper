@@ -19,6 +19,7 @@ HEADER = {
     "sec-fetch-dest": "document",
 }
 
+
 def convert_date_to_number(dt, override_year=None):
     try:
         yr = re.search("(20|19)[0-9]{2}", dt, re.IGNORECASE)
